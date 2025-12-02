@@ -2,7 +2,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.io.*;
 import java.net.*;
-import java.util.Arrays;
 
 public class GameClient extends JFrame {
     private Socket socket;
@@ -17,35 +16,19 @@ public class GameClient extends JFrame {
     private JTextArea battleLog;
     private JProgressBar myHpBar, oppHpBar;
     private JLabel myCharImg, oppCharImg;
-    private JLabel myCharLabel; // 내 캐릭터 정보 표시
 
-    // 공통 액션 버튼
-    JButton atkBtn;
-    // 고유 스킬 버튼 (캐릭터별로 동적으로 설정)
-    JButton skillBtn1, skillBtn2; 
-    
-    // 캐릭터 상태 추적
+    JButton atkBtn, defBtn, healBtn;
+
     private int myCharType = -1;
     private int myMaxHp = 100;
-    private String[] charNames = {"전사 (Warrior)", "마법사 (Magician)", "엘프 (Elf)"};
-    
-    // 한국어 폰트 설정
-    private static final String KOREAN_FONT_NAME = "맑은 고딕";
+    private int oppCharType = -1;
 
 
     public GameClient() {
         setTitle("Battle Arena Online [Team 28]");
-        setSize(1000, 700); // 크기 확장
+        setSize(800, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-        
-        // 폰트 설정
-        Font defaultFont = new Font(KOREAN_FONT_NAME, Font.PLAIN, 12);
-        UIManager.put("Label.font", defaultFont);
-        UIManager.put("Button.font", defaultFont);
-        UIManager.put("TextArea.font", defaultFont);
-        UIManager.put("OptionPane.font", defaultFont);
-
 
         cardLayout = new CardLayout();
         mainPanelContainer = new JPanel(cardLayout);
@@ -63,27 +46,54 @@ public class GameClient extends JFrame {
     }
 
     // 메인 화면
-    private JPanel createMainScreen() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(new Color(50, 50, 70));
-        
-        JLabel titleLabel = new JLabel("BATTLE ARENA ONLINE", SwingConstants.CENTER);
-        titleLabel.setFont(new Font(KOREAN_FONT_NAME, Font.BOLD, 48));
-        titleLabel.setForeground(new Color(255, 180, 0)); // Accent color
-        titleLabel.setBorder(BorderFactory.createEmptyBorder(30, 0, 30, 0));
+ // 먼저 클래스 위쪽에 BackgroundPanel 정의 추가
+    class BackgroundPanel extends JPanel {
+        private Image backgroundImage;
 
+        public BackgroundPanel() {
+            backgroundImage = new ImageIcon(getClass().getResource("/image/background.png")).getImage();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
+        }
+    }
+
+
+
+    private JPanel createMainScreen() {
+        // 기존 JPanel → BackgroundPanel 로 변경
+        JPanel panel = new BackgroundPanel();
+        panel.setLayout(new BorderLayout());
+
+        // Title 이미지
+        ImageIcon battleIcon = new ImageIcon(getClass().getResource("/image/battle.png"));
+        Image scaled = battleIcon.getImage().getScaledInstance(400, 300, Image.SCALE_SMOOTH);
+        JLabel titleLabel = new JLabel(new ImageIcon(scaled), SwingConstants.CENTER);
+        titleLabel.setOpaque(false);  // 배경 투명
+
+        // Center 영역
         JPanel centerPanel = new JPanel(new GridBagLayout());
-        centerPanel.setBackground(panel.getBackground());
-        
-        JButton startBtn = new JButton("게임 시작 (매칭 찾기)");
-        startBtn.setFont(new Font(KOREAN_FONT_NAME, Font.BOLD, 20));
-        startBtn.setPreferredSize(new Dimension(300, 70));
-        startBtn.setBackground(new Color(26, 188, 156));
-        startBtn.setForeground(Color.WHITE);
+        centerPanel.setOpaque(false);   // 배경 투명
+
+        // Start 버튼 이미지
+        ImageIcon startIcon = new ImageIcon(getClass().getResource("/image/start.png"));
+        Image original = startIcon.getImage();
+        int newWidth = 150;
+        int newHeight = original.getHeight(null) * newWidth / original.getWidth(null);
+        Image scaledImage = original.getScaledInstance(newWidth, newHeight, Image.SCALE_SMOOTH);
+        JButton startBtn = new JButton(new ImageIcon(scaledImage));
+
+        startBtn.setBorderPainted(false);
+        startBtn.setContentAreaFilled(false);
+        startBtn.setFocusPainted(false);
+        startBtn.setOpaque(false);
 
         userCountLabel = new JLabel("현재 접속자 수: 0명");
-        userCountLabel.setFont(new Font(KOREAN_FONT_NAME, Font.PLAIN, 18));
-        userCountLabel.setForeground(Color.WHITE);
+        userCountLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
+        userCountLabel.setOpaque(false);
 
         startBtn.addActionListener(e -> {
             sendMessage("REQUEST_MATCH");
@@ -91,220 +101,255 @@ public class GameClient extends JFrame {
         });
 
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridx = 0; gbc.gridy = 0; gbc.insets = new Insets(20,0,20,0);
+        gbc.gridx = 0; gbc.gridy = 0; gbc.insets = new Insets(10, 0, 10, 0);
         centerPanel.add(startBtn, gbc);
+
         gbc.gridy = 1;
         centerPanel.add(userCountLabel, gbc);
 
         panel.add(titleLabel, BorderLayout.NORTH);
         panel.add(centerPanel, BorderLayout.CENTER);
+
         return panel;
     }
 
+
     // 매칭 대기 화면
     private JPanel createWaitScreen() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(new Color(50, 50, 70));
-        
+        JPanel panel = new BackgroundPanel();  // ✅ 배경 이미지 사용
+        panel.setLayout(new BorderLayout());
+
         JLabel waitLabel = new JLabel("상대방을 기다리는 중입니다...", SwingConstants.CENTER);
-        waitLabel.setFont(new Font(KOREAN_FONT_NAME, Font.PLAIN, 24));
-        waitLabel.setForeground(new Color(255, 180, 0));
+        waitLabel.setFont(new Font("SansSerif", Font.PLAIN, 20));
+        waitLabel.setOpaque(false);  // ✅ 배경 투명
+
         panel.add(waitLabel, BorderLayout.CENTER);
         return panel;
     }
 
     // 캐릭터 선택 화면
     private JPanel createSelectScreen() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(new Color(50, 50, 70));
-        
-        JLabel guideLabel = new JLabel("캐릭터를 선택하세요!", SwingConstants.CENTER);
-        guideLabel.setFont(new Font(KOREAN_FONT_NAME, Font.BOLD, 30));
-        guideLabel.setForeground(new Color(26, 188, 156));
-        guideLabel.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
+        JPanel panel = new BackgroundPanel();  // ✅ 배경 이미지 사용
+        panel.setLayout(new BorderLayout());
 
-        JPanel charPanel = new JPanel(new GridLayout(1, 3, 20, 20));
-        charPanel.setBackground(panel.getBackground());
-        charPanel.setBorder(BorderFactory.createEmptyBorder(0, 50, 50, 50));
+        ImageIcon selectIcon = new ImageIcon(getClass().getResource("/image/selectcharacter.png"));
+        Image scaled = selectIcon.getImage().getScaledInstance(200, 200, Image.SCALE_SMOOTH);
+        JLabel guideLabel = new JLabel(new ImageIcon(scaled), SwingConstants.CENTER);
+        guideLabel.setOpaque(false);
+        JPanel charPanel = new JPanel(new GridLayout(1, 3, 10, 10));
+        charPanel.setOpaque(false);  // ✅ 배경 투명
 
-        // 캐릭터 설명 업데이트 (새로운 스탯 및 기능 반영)
-        String[] charDescriptions = {
-            "전사: HP 300, DEF 15. 높은 체력/방어력, 낮은 공격/속공.\n 스킬: 방어력 +10 (3회), 방패(1턴 무효, 2회).",
-            "마법사: HP 180, ATK 70. 최고 공격력, 낮은 체력/방어력.\n 스킬: 메테오(강력 공격, 2회), 디버프(상대 ATK/DEF 하락, 3회).",
-            "엘프: HP 220, SPEED 30. 최고 속공, 균형 잡힌 능력치.\n 스킬: 갑옷뚫기(공격+상대 DEF 하락, 3회), 회피(1턴 회피, 2회)."
-        };
+        String[] chars = {"전사 (체력형)", "마법사 (공격형)", "궁수 (속도형)"};
 
         for (int i = 0; i < 3; i++) {
             final int charIdx = i;
-            JButton btn = new JButton("<html><center>" + charNames[i] + "<br><br><span style='font-size:10px;'>" + charDescriptions[i].replaceAll("\n", "<br>") + "</span></center></html>");
-            btn.setFont(new Font(KOREAN_FONT_NAME, Font.BOLD, 16));
-            btn.setBackground(new Color(70, 90, 110));
-            btn.setForeground(Color.WHITE);
+
+            JButton btn;
+
+            if (i == 0) {
+                // 전사 버튼에 이미지 추가
+                ImageIcon icon = new ImageIcon(getClass().getResource("/image/warrior1.png"));
+                Image scaledChar = icon.getImage().getScaledInstance(200, 200, Image.SCALE_SMOOTH);
+                ImageIcon scaledIcon = new ImageIcon(scaledChar);
+
+                btn = new JButton("<html><center>전사 (체력형)<br></center></html>", scaledIcon);
+                btn.setHorizontalTextPosition(SwingConstants.CENTER);
+                btn.setVerticalTextPosition(SwingConstants.BOTTOM);
+
+            } else if (i == 1) {
+                // 마법사 버튼에 이미지 추가
+                ImageIcon icon = new ImageIcon(getClass().getResource("/image/magician1.png"));
+                Image scaledChar = icon.getImage().getScaledInstance(200, 200, Image.SCALE_SMOOTH);
+                ImageIcon scaledIcon = new ImageIcon(scaledChar);
+
+                btn = new JButton("<html><center>마법사 (공격형)<br></center></html>", scaledIcon);
+                btn.setHorizontalTextPosition(SwingConstants.CENTER);
+                btn.setVerticalTextPosition(SwingConstants.BOTTOM);
+
+            } else {
+                // 궁수(엘프) 버튼에 이미지 추가
+                ImageIcon icon = new ImageIcon(getClass().getResource("/image/elp1.png"));
+                Image scaledChar = icon.getImage().getScaledInstance(200, 200, Image.SCALE_SMOOTH);
+                ImageIcon scaledIcon = new ImageIcon(scaledChar);
+
+                btn = new JButton("<html><center>궁수 (속도형)<br></center></html>", scaledIcon);
+                btn.setHorizontalTextPosition(SwingConstants.CENTER);
+                btn.setVerticalTextPosition(SwingConstants.BOTTOM);
+            }
+
+
+            btn.setFocusPainted(false);
+            btn.setOpaque(false);              
+            btn.setContentAreaFilled(false);   
+            btn.setBorderPainted(true);        
 
             btn.addActionListener(e -> {
                 myCharType = charIdx;
                 sendMessage("SELECT:" + charIdx);
-                guideLabel.setText(charNames[charIdx] + " 선택 완료! 상대방 기다리는 중...");
+                guideLabel.setText("선택 완료! 상대방 기다리는 중...");
                 for (Component c : charPanel.getComponents()) c.setEnabled(false);
             });
+
             charPanel.add(btn);
         }
+
 
         panel.add(guideLabel, BorderLayout.NORTH);
         panel.add(charPanel, BorderLayout.CENTER);
         return panel;
     }
 
+    private ImageIcon getCharacterIcon(int charType) {
+        String path = switch (charType) {
+            case 0 -> "/image/warrior1.png";
+            case 1 -> "/image/magician1.png";
+            case 2 -> "/image/elp1.png";
+            default -> "/image/unknown.png"; // 예외 대비
+        };
+
+        ImageIcon icon = new ImageIcon(getClass().getResource(path));
+        Image img = icon.getImage().getScaledInstance(300, 300, Image.SCALE_SMOOTH);
+        return new ImageIcon(img);
+    }
+    
+    private ImageIcon getAttackImage(int type, int state) {
+        // state: 1 = 기본, 2 = 공격, 3 = 피격
+        String prefix = switch (type) {
+            case 0 -> "warrior";
+            case 1 -> "magician";
+            case 2 -> "elp";
+            default -> "unknown";
+        };
+        String path = "/image/" + prefix + state + ".png";
+        ImageIcon icon = new ImageIcon(getClass().getResource(path));
+        Image img = icon.getImage().getScaledInstance(300, 300, Image.SCALE_SMOOTH);
+        return new ImageIcon(img);
+    }
+
+
     // 전투 화면
     private JPanel createBattleScreen() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(new Color(50, 50, 70));
-        
-        // 상단 캐릭터 정보 패널
-        JPanel topPanel = new JPanel(new GridLayout(1, 2, 20, 0));
-        topPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
-        topPanel.setBackground(panel.getBackground());
+    	JPanel panel = new JPanel(new BorderLayout()) {
+    	    Image backgroundImage = new ImageIcon(getClass().getResource("/image/battle_background.png")).getImage();
 
-        // 내 캐릭터 정보
+    	    @Override
+    	    protected void paintComponent(Graphics g) {
+    	        super.paintComponent(g);
+    	        g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
+    	    }
+    	};
+
+        panel.setLayout(new BorderLayout());
+
+        JPanel topPanel = new JPanel(new GridLayout(1, 2));
+        topPanel.setOpaque(false);  // ✅ 배경이 보이도록
+
         JPanel myPanel = new JPanel(new BorderLayout());
-        myPanel.setBackground(new Color(70, 90, 110));
-        myPanel.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createLineBorder(new Color(26, 188, 156), 2), "나의 캐릭터", 
-            0, 2, new Font(KOREAN_FONT_NAME, Font.BOLD, 18), Color.WHITE));
-        
-        myCharImg = new JLabel("[내 캐릭터 이미지/이름]", SwingConstants.CENTER);
-        myCharImg.setFont(new Font(KOREAN_FONT_NAME, Font.BOLD, 24));
-        myCharImg.setForeground(Color.WHITE);
+        myPanel.setOpaque(false);
+
+        myCharImg = new JLabel("[내 캐릭터]", SwingConstants.CENTER);
+        myCharImg.setBorder(BorderFactory.createLineBorder(Color.BLUE, 2));
         myHpBar = new JProgressBar();
         myHpBar.setStringPainted(true);
-        myHpBar.setForeground(new Color(46, 204, 113)); // Emerald Green
-        myHpBar.setBackground(new Color(50, 50, 70));
+        myHpBar.setForeground(Color.GREEN);
         myPanel.add(myCharImg, BorderLayout.CENTER);
         myPanel.add(myHpBar, BorderLayout.SOUTH);
-        
-        myCharLabel = new JLabel("상태: -", SwingConstants.CENTER);
-        myCharLabel.setForeground(new Color(255, 180, 0));
-        myPanel.add(myCharLabel, BorderLayout.NORTH);
 
-        // 상대 캐릭터 정보
         JPanel oppPanel = new JPanel(new BorderLayout());
-        oppPanel.setBackground(new Color(70, 90, 110));
-        oppPanel.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createLineBorder(Color.RED, 2), "상대 캐릭터",
-            0, 2, new Font(KOREAN_FONT_NAME, Font.BOLD, 18), Color.WHITE));
-        
-        oppCharImg = new JLabel("[상대 캐릭터 이미지/이름]", SwingConstants.CENTER);
-        oppCharImg.setFont(new Font(KOREAN_FONT_NAME, Font.BOLD, 24));
-        oppCharImg.setForeground(Color.WHITE);
+        oppPanel.setOpaque(false);
+
+        oppCharImg = new JLabel("[상대 캐릭터]", SwingConstants.CENTER);
+        oppCharImg.setBorder(BorderFactory.createLineBorder(Color.RED, 2));
         oppHpBar = new JProgressBar();
         oppHpBar.setStringPainted(true);
-        oppHpBar.setForeground(new Color(231, 76, 60)); // Alizarin Red
-        oppHpBar.setBackground(new Color(50, 50, 70));
+        oppHpBar.setForeground(Color.RED);
         oppPanel.add(oppCharImg, BorderLayout.CENTER);
         oppPanel.add(oppHpBar, BorderLayout.SOUTH);
 
         topPanel.add(myPanel);
         topPanel.add(oppPanel);
 
-        // 하단 로그 및 액션 패널
-        JPanel bottomPanel = new JPanel(new BorderLayout(0, 10));
-        bottomPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
-        
-        battleLog = new JTextArea(10, 40);
+        JPanel bottomPanel = new JPanel(new BorderLayout());
+        bottomPanel.setOpaque(false);
+
+        battleLog = new JTextArea(5, 40);
         battleLog.setEditable(false);
-        battleLog.setBackground(new Color(44, 62, 80)); // Wet Asphalt
-        battleLog.setForeground(new Color(236, 240, 241)); // Light Text
-        battleLog.setFont(new Font(KOREAN_FONT_NAME, Font.PLAIN, 14));
         JScrollPane scroll = new JScrollPane(battleLog);
-        scroll.setBorder(BorderFactory.createLineBorder(new Color(127, 140, 141), 1));
+
+        JPanel actionPanel = new JPanel(new FlowLayout());
+        actionPanel.setOpaque(false);
+
+        atkBtn = new JButton("공격 (Attack)");
+        defBtn = new JButton("방어 (Defend)");
+        healBtn = new JButton("회복 (Heal)");
+
+        atkBtn.addActionListener(e -> {
+            sendMessage("ACTION:ATTACK");
+
+            // 👉 애니메이션: 공격 상태로 변경
+            myCharImg.setIcon(getAttackImage(myCharType, 2));   // 때리는 이미지
+            oppCharImg.setIcon(getAttackImage(oppCharType, 3)); // 맞는 이미지
+
+            // 👉 1초 후 다시 원래 이미지로 복구
+            new javax.swing.Timer(1000, evt -> {
+                myCharImg.setIcon(getAttackImage(myCharType, 1));   // 기본 이미지
+                oppCharImg.setIcon(getAttackImage(oppCharType, 1)); // 상대방 기본 이미지 복구
+                ((javax.swing.Timer) evt.getSource()).stop();
+            }).start();
+        });
 
 
-        // 액션 버튼 패널
-        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 5));
-        actionPanel.setBackground(panel.getBackground());
-        
-        // 공통 버튼
-        atkBtn = createActionButton("공격 (일반)", "ATTACK");
-        
-        // 고유 스킬 버튼 (2개만 표시)
-        skillBtn1 = createActionButton("스킬 1", "SKILL1"); // 초기 더미
-        skillBtn2 = createActionButton("스킬 2", "SKILL2"); // 초기 더미
-        
+        defBtn.addActionListener(e -> sendMessage("ACTION:DEFEND"));
+        healBtn.addActionListener(e -> sendMessage("ACTION:HEAL"));
+
         actionPanel.add(atkBtn);
-        actionPanel.add(skillBtn1);
-        actionPanel.add(skillBtn2);
-        
+        actionPanel.add(defBtn);
+        actionPanel.add(healBtn);
 
         bottomPanel.add(scroll, BorderLayout.CENTER);
         bottomPanel.add(actionPanel, BorderLayout.SOUTH);
 
         panel.add(topPanel, BorderLayout.CENTER);
         panel.add(bottomPanel, BorderLayout.SOUTH);
+
         return panel;
     }
-    
-    // 액션 버튼 생성 헬퍼
-    private JButton createActionButton(String text, String command) {
-        JButton btn = new JButton(text);
-        btn.setPreferredSize(new Dimension(200, 40));
-        btn.setFont(new Font(KOREAN_FONT_NAME, Font.BOLD, 14));
-        btn.setBackground(new Color(52, 152, 219)); // Peter River
-        btn.setForeground(Color.WHITE);
-        btn.setFocusPainted(false);
-        
-        // 액션 리스너는 processServerMessage에서 처리되는 ACTION 프로토콜을 따름
-        btn.addActionListener(e -> {
-            if (btn.isEnabled()) {
-                // 고유 스킬 버튼은 커맨드에 따라 실제 프로토콜을 다르게 보냄
-                if (command.equals("SKILL1")) {
-                    sendMessage(getSkillCommand(1));
-                } else if (command.equals("SKILL2")) {
-                    sendMessage(getSkillCommand(2));
-                } else {
-                    sendMessage("ACTION:" + command); // ATTACK, DEFEND
-                }
-            }
-        });
-        return btn;
-    }
-    
-    // 캐릭터 타입에 따른 스킬 커맨드 생성
-    private String getSkillCommand(int skillNum) {
-        String base = "ACTION:";
-        if (myCharType == 0) { // 전사
-            return base + (skillNum == 1 ? "WAR_DEFUP" : "WAR_SHIELD");
-        } else if (myCharType == 1) { // 마법사
-            return base + (skillNum == 1 ? "MAG_METEOR" : "MAG_DEBUFF");
-        } else if (myCharType == 2) { // 엘프
-            return base + (skillNum == 1 ? "ELF_ARMORBREAK" : "ELF_EVASION");
-        }
-        return base + "INVALID";
-    }
+
 
     // 결과 화면
     private JPanel createResultScreen(String resultMsg) {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(new Color(50, 50, 70));
-        
-        JLabel resLabel = new JLabel(resultMsg, SwingConstants.CENTER);
-        resLabel.setFont(new Font(KOREAN_FONT_NAME, Font.BOLD, 50));
-        resLabel.setForeground(new Color(255, 180, 0));
-        resLabel.setName("RESULT_LABEL");
+        // ✅ 익명 클래스 방식으로 배경 이미지 적용
+        JPanel panel = new JPanel(new BorderLayout()) {
+            Image backgroundImage = new ImageIcon(getClass().getResource("/image/background.png")).getImage();
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
+            }
+        };
+
+        // ✅ 결과 이미지 라벨 (초기엔 빈 이미지)
+        JLabel resLabel = new JLabel();
+        resLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        resLabel.setName("RESULT_LABEL");  // 나중에 참조할 이름
 
         JButton homeBtn = new JButton("메인 화면으로");
-        homeBtn.setFont(new Font(KOREAN_FONT_NAME, Font.BOLD, 20));
-        homeBtn.setPreferredSize(new Dimension(250, 60));
-        homeBtn.setBackground(new Color(26, 188, 156));
-        homeBtn.setForeground(Color.WHITE);
-
-        homeBtn.addActionListener(e -> {
-            // 서버에 게임 종료를 알리고 메인으로 복귀 (서버에서 상태 초기화는 이미 됨)
-            cardLayout.show(mainPanelContainer, "MAIN");
-        });
+        homeBtn.addActionListener(e -> cardLayout.show(mainPanelContainer, "MAIN"));
 
         panel.add(resLabel, BorderLayout.CENTER);
         panel.add(homeBtn, BorderLayout.SOUTH);
+
         return panel;
+    }
+
+
+    private int getMaxHpForChar(int charType) {
+        switch (charType) {
+            case 0: return 200;
+            case 1: return 150;
+            case 2: return 170;
+            default: return 100;
+        }
     }
 
     // 서버 연결
@@ -321,12 +366,40 @@ public class GameClient extends JFrame {
                     SwingUtilities.invokeLater(() -> processServerMessage(finalMsg));
                 }
             } catch (IOException e) {
-                // 서버 연결 실패 시 메인 화면에 오류 메시지 표시
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this, "서버 연결에 실패했습니다.", "연결 오류", JOptionPane.ERROR_MESSAGE));
                 e.printStackTrace();
             }
         }).start();
     }
+    
+    private void showCustomPopup(String message) {
+        JDialog dialog = new JDialog(this, "알림", true);
+        dialog.setUndecorated(true);  // 타이틀 바 제거
+        dialog.setSize(400, 150);
+        dialog.setLocationRelativeTo(this);
+
+        // 배경 Panel
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY, 3));
+        panel.setBackground(new Color(0, 0, 0, 220)); // 반투명 느낌
+
+        // 메시지 라벨
+        JLabel msgLabel = new JLabel(message, SwingConstants.CENTER);
+        msgLabel.setForeground(Color.WHITE);
+        msgLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
+
+        // OK 버튼
+        JButton okBtn = new JButton("확인");
+        okBtn.setFocusPainted(false);
+        okBtn.addActionListener(e -> dialog.dispose());
+
+        // 구성
+        panel.add(msgLabel, BorderLayout.CENTER);
+        panel.add(okBtn, BorderLayout.SOUTH);
+
+        dialog.setContentPane(panel);
+        dialog.setVisible(true);
+    }
+
 
     private void sendMessage(String msg) {
         if (out != null) out.println(msg);
@@ -337,169 +410,85 @@ public class GameClient extends JFrame {
             userCountLabel.setText("현재 접속자 수: " + msg.split(":")[1] + "명");
 
         } else if (msg.equals("MATCH_SUCCESS")) {
-            // 게임 재시작 시 클라이언트 상태 초기화: 
-            myCharType = -1; // 클라이언트 캐릭터 선택 초기화
-            
-            // 캐릭터 선택 버튼 활성화
-            JPanel selectPanel = (JPanel) mainPanelContainer.getComponent(2); // SELECT 화면 인덱스 2
-            JPanel charPanel = (JPanel) selectPanel.getComponent(1); // 두 번째 컴포넌트(캐릭터 버튼 패널)
-            for (Component c : charPanel.getComponents()) c.setEnabled(true);
-            
-            // 안내 메시지 초기화
-            JLabel guideLabel = (JLabel) selectPanel.getComponent(0);
-            guideLabel.setText("캐릭터를 선택하세요!");
-            
-            JOptionPane.showMessageDialog(this, "매칭이 되었습니다! 캐릭터를 선택하세요.");
+            showCustomPopup("매칭이 되었습니다! 곧 게임이 시작됩니다.");
             cardLayout.show(mainPanelContainer, "SELECT");
 
         } else if (msg.startsWith("GAME_START:")) {
-            // GAME_START:상대캐릭터타입:상대maxHp:나의maxHp
             String[] parts = msg.split(":");
-            int oppCharType = Integer.parseInt(parts[1]);
+
+            oppCharType = Integer.parseInt(parts[1]);  // 전역 변수에 저장
             int oppMaxHp = Integer.parseInt(parts[2]);
-            myMaxHp = Integer.parseInt(parts[3]);
 
-            // UI 설정 및 초기화
-            myHpBar.setMaximum(myMaxHp);
-            myHpBar.setValue(myMaxHp);
-            myHpBar.setString(myMaxHp + " / " + myMaxHp);
+            // 선택된 캐릭터 이미지 적용
+            myCharImg.setIcon(getCharacterIcon(myCharType));
+            myCharImg.setText("");
 
+            oppCharImg.setIcon(getCharacterIcon(oppCharType));
+            oppCharImg.setText("");
+
+            // HP 바 설정
             oppHpBar.setMaximum(oppMaxHp);
             oppHpBar.setValue(oppMaxHp);
             oppHpBar.setString(oppMaxHp + " / " + oppMaxHp);
 
-            myCharImg.setText(charNames[myCharType] + " (나)");
-            oppCharImg.setText(charNames[oppCharType] + " (상대)");
-            
-            // 전투 시작 시 스킬 버튼 텍스트 설정 (오류 해결 핵심)
-            setSkillButtonTextAndInitialState(myCharType); // 쿨다운 횟수를 반영한 텍스트 설정
+            myMaxHp = getMaxHpForChar(myCharType);
+            myHpBar.setMaximum(myMaxHp);
+            myHpBar.setValue(myMaxHp);
+            myHpBar.setString(myMaxHp + " / " + myMaxHp);
 
             battleLog.setText("전투 시작!\n");
             cardLayout.show(mainPanelContainer, "BATTLE");
-
-        } else if (msg.startsWith("YOUR_TURN:")) {
-            // YOUR_TURN:나의스킬1:나의스킬2:상대의스킬1:상대의스킬2
-            String[] parts = msg.split(":");
-            updateSkillButtonState(true, parts[1], parts[2], parts[3], parts[4]);
-            
+        }else if (msg.equals("YOUR_TURN")) {
             battleLog.append(">> 당신의 턴입니다. 행동을 선택하세요.\n");
-            myCharLabel.setText("상태: 나의 턴!");
 
-        } else if (msg.startsWith("OPP_TURN:")) {
-            // OPP_TURN:상대의스킬1:상대의스킬2:나의스킬1:나의스킬2
-            String[] parts = msg.split(":");
-            updateSkillButtonState(false, parts[3], parts[4], parts[1], parts[2]);
+            atkBtn.setEnabled(true);
+            defBtn.setEnabled(true);
+            healBtn.setEnabled(true);
 
+        } else if (msg.equals("OPP_TURN")) {
             battleLog.append(">> 상대방의 턴입니다...\n");
-            myCharLabel.setText("상태: 상대 턴...");
+
+            atkBtn.setEnabled(false);
+            defBtn.setEnabled(false);
+            healBtn.setEnabled(false);
 
 
         } else if (msg.startsWith("UPDATE:")) {
-            // UPDATE:나의hp:상대hp:나의남은스킬1:나의남은스킬2:상대남은스킬1:상대남은스킬2:로그
-            String[] parts = msg.split(":", 8);
+            String[] parts = msg.split(":", 4);
             int myHp  = Integer.parseInt(parts[1]);
             int oppHp = Integer.parseInt(parts[2]);
-            String log = parts[7];
+            String log = parts[3];
 
             myHpBar.setValue(myHp);
             myHpBar.setString(myHp + " / " + myMaxHp);
 
             oppHpBar.setValue(oppHp);
             oppHpBar.setString(oppHp + " / " + oppHpBar.getMaximum());
-            
+
             battleLog.append(log + "\n");
             battleLog.setCaretPosition(battleLog.getDocument().getLength());
-            
+
         } else if (msg.startsWith("RESULT:")) {
             String result = msg.split(":")[1];
-            String endMsg = result.equals("WIN") ? "승리했습니다!" : "패배했습니다...";
+
+            // ✅ 이미지 파일 경로 결정
+            String imagePath = result.equals("WIN") ? "/image/victory.png" : "/image/defeat.png";
+            ImageIcon icon = new ImageIcon(getClass().getResource(imagePath));
+            Image scaled = icon.getImage().getScaledInstance(400, 200, Image.SCALE_SMOOTH);
+            ImageIcon scaledIcon = new ImageIcon(scaled);
 
             JPanel resPanel = (JPanel) mainPanelContainer.getComponent(4);
             for (Component c : resPanel.getComponents()) {
-                if ("RESULT_LABEL".equals(c.getName())) {
-                    ((JLabel) c).setText(endMsg);
+                if ("RESULT_LABEL".equals(c.getName()) && c instanceof JLabel) {
+                    ((JLabel) c).setIcon(scaledIcon);
+                    ((JLabel) c).setText("");  // 텍스트 제거
                 }
             }
+
             cardLayout.show(mainPanelContainer, "RESULT");
         }
-    }
-    
-    // 모든 액션 버튼 활성화/비활성화
-    private void setAllActionsEnabled(boolean enabled) {
-        atkBtn.setEnabled(enabled);
-        
-        // 스킬 버튼은 쿨다운 상태에 따라 추가적으로 조정됨
-        // isEnabled 플래그는 쿨다운과 관계없이 턴 자체를 막는 역할만 수행
-        skillBtn1.setEnabled(enabled); 
-        skillBtn2.setEnabled(enabled); 
-    }
-    
-    // 캐릭터 타입에 따른 스킬 버튼 텍스트 및 초기 상태 설정
-    private void setSkillButtonTextAndInitialState(int charType) {
-        String skill1Name;
-        int skill1InitialCount;
-        String skill2Name;
-        int skill2InitialCount;
-        
-        if (charType == 0) { // 전사
-            skill1Name = "방어력 높이기"; skill1InitialCount = 3;
-            skill2Name = "방패"; skill2InitialCount = 2;
-        } else if (charType == 1) { // 마법사
-            skill1Name = "메테오"; skill1InitialCount = 2;
-            skill2Name = "디버프"; skill2InitialCount = 3;
-        } else { // 엘프
-            skill1Name = "갑옷뚫기"; skill1InitialCount = 3;
-            skill2Name = "회피"; skill2InitialCount = 2;
-        }
-        
-        skillBtn1.setText(skill1Name + " (" + skill1InitialCount + "회)");
-        skillBtn2.setText(skill2Name + " (" + skill2InitialCount + "회)");
-        
-        // 초기 쿨다운 횟수에 따라 버튼 활성화/비활성화 상태 설정
-        skillBtn1.setEnabled(skill1InitialCount > 0);
-        skillBtn2.setEnabled(skill2InitialCount > 0);
-    }
-    
-    // 스킬 버튼 상태 및 쿨다운 업데이트 (쿨다운이 0이면 버튼 비활성화)
-    private void updateSkillButtonState(boolean isMyTurn, String mySkill1CountStr, String mySkill2CountStr, 
-                                        String oppSkill1CountStr, String oppSkill2CountStr) {
-        try {
-            int mySkill1Count = Integer.parseInt(mySkill1CountStr);
-            int mySkill2Count = Integer.parseInt(mySkill2CountStr);
-            
-            // 1. 공통 버튼 턴 활성화/비활성화 설정
-            setAllActionsEnabled(isMyTurn);
-            
-            // 2. 나의 스킬 버튼 쿨다운 업데이트 및 턴 활성화/비활성화
-            
-            // myCharType에 맞는 텍스트와 쿨다운을 조합하여 설정
-            setSkillButtonTextAndCount(skillBtn1, mySkill1Count, 1);
-            setSkillButtonTextAndCount(skillBtn2, mySkill2Count, 2);
-            
-            // 턴이 돌아왔을 때 (isMyTurn == true) 쿨다운이 0이면 비활성화
-            if (isMyTurn) {
-                if (mySkill1Count == 0) skillBtn1.setEnabled(false);
-                if (mySkill2Count == 0) skillBtn2.setEnabled(false);
-            }
-            
-        } catch (NumberFormatException e) {
-            System.err.println("스킬 카운트 파싱 오류: " + e.getMessage());
-        }
-    }
-    
-    // SkillBtn의 텍스트와 상태를 갱신하는 헬퍼
-    private void setSkillButtonTextAndCount(JButton button, int count, int skillNum) {
-        String skillName;
-        if (myCharType == 0) { // 전사
-            skillName = (skillNum == 1) ? "방어력 높이기" : "방패";
-        } else if (myCharType == 1) { // 마법사
-            skillName = (skillNum == 1) ? "메테오" : "디버프";
-        } else { // 엘프
-            skillName = (skillNum == 1) ? "갑옷뚫기" : "회피";
-        }
-        button.setText(skillName + " (" + count + "회)");
-    }
 
+    }
 
     public static void main(String[] args) {
         new GameClient();

@@ -2,7 +2,7 @@ import java.util.Random;
 
 public class GameCharacter {
 
-    public final int type;   // 0: 전사(Warrior), 1: 마법사(Magician), 2: 엘프(Elf)
+    public final int type;
     public final int maxHp;
     public int currentHp;
     
@@ -11,106 +11,64 @@ public class GameCharacter {
     public int def;
     public int speed;
     
-    // 전투 중 일시적 상태
-    public boolean defending = false; // 방어 (일반)
-    public boolean shieldActive = false; // 방패 (전사 스킬)
-    public boolean evasionActive = false; // 회피 (엘프 스킬)
-    
-    // 스킬 쿨다운 (남은 사용 횟수)
-    public int defUpCount;      // 전사: 방어력 높이기 (3회)
-    public int shieldCount;     // 전사: 방패 (2회)
-    public int meteorCount;     // 마법사: 메테오 (2회)
-    public int debuffCount;     // 마법사: 디버프 (3회)
-    public int armorBreakCount; // 엘프: 갑옷뚫기 (3회)
-    public int evasionCount;    // 엘프: 회피 (2회)
-    
-    // 디버프 상태 저장을 위한 기본 스탯
-    public final int baseAtk; 
-    public final int baseDef; 
+    // 상태 변수
+    public boolean defending = false; // 방어 태세 여부
+    public int specialCount;          // 특수 공격 남은 횟수 (공통)
 
     public GameCharacter(int type) {
         this.type = type;
-
+        
+        // 캐릭터별 스탯 차이만 남기고 나머지는 통일
         switch (type) {
-            case 0: // 전사 (Warrior): 체력 300, 방어 15, 공격 35, 속공 10
-                maxHp = 300; atk = 35; def = 15; speed = 10;
-                defUpCount = 3; shieldCount = 2;
+            case 0: // 전사: 체력 높음
+                maxHp = 200; atk = 15; def = 15; speed = 10;
                 break;
-            case 1: // 마법사 (Magician): 체력 180, 방어 5, 공격 70, 속공 20
-                maxHp = 180; atk = 70; def = 5; speed = 20;
-                meteorCount = 2; debuffCount = 3;
+            case 1: // 마법사: 공격력 높음
+                maxHp = 150; atk = 25; def = 5; speed = 20;
                 break;
-            case 2: // 엘프 (Elf): 체력 220, 방어 8, 공격 50, 속공 30
-                maxHp = 220; atk = 50; def = 8; speed = 30;
-                armorBreakCount = 3; evasionCount = 2;
+            case 2: // 엘프: 속도 빠름
+                maxHp = 170; atk = 18; def = 8; speed = 30;
                 break;
             default:
-                maxHp = 150; atk = 30; def = 10; speed = 10;
-                defUpCount = 0; shieldCount = 0; meteorCount = 0; debuffCount = 0; armorBreakCount = 0; evasionCount = 0;
+                maxHp = 100; atk = 10; def = 10; speed = 10;
         }
         currentHp = maxHp;
-        this.baseAtk = atk;
-        this.baseDef = def;
+        specialCount = 3; // 모든 캐릭터 특수공격 3회로 통일
     }
 
-    // 기본 공격 (ATK + 0~10 랜덤 데미지, 마법사는 0~5)
+    // [변경] 기본 공격: ATK + (1~10 랜덤)
     public int baseAttackDamage() {
-        int randRange = (type == 1) ? 5 : 10; // 마법사는 랜덤 범위 작게
-        int base = atk;
-        int rand = new Random().nextInt(randRange + 1); // 0부터 randRange까지
-        int dmg = base + rand;
-        return Math.max(1, dmg);
+        int randomDmg = new Random().nextInt(atk) + 1; // 1~10
+        return atk + randomDmg;
     }
     
-    // 메테오 공격 (마법사 스킬, ATK * 1.5)
-    public int meteorDamage() {
-        if (meteorCount > 0) {
-            meteorCount--;
-            int base = (int)(atk * 1.5);
-            int rand = new Random().nextInt(21); // 0~20 랜덤 추가 피해
-            return base + rand;
-        }
-        return 0;
-    }
-    
-    // 갑옷뚫기 공격 (엘프 스킬, ATK * 0.8)
-    public int armorBreakDamage() {
-        if (armorBreakCount > 0) {
-            armorBreakCount--;
-            int base = (int)(atk * 0.8);
-            int rand = new Random().nextInt(11); // 0~10 랜덤 추가 피해
-            return base + rand;
-        }
-        return 0;
+    // [신규] 특수 공격: (ATK * 1.6) + (1 ~ ATK*1.6 범위의 랜덤)
+    public int specialAttackDamage() {
+        if (specialCount <= 0) return 0;
+        
+        specialCount--;
+        int base = (int)(atk * 1.6);
+        int randomDmg = new Random().nextInt(base) + 1; // 1 ~ base
+        return base + randomDmg;
     }
 
-    // 회복 기능은 완전히 제거됨 (baseHealAmount 삭제)
-
-    // 데미지 적용
+    // [변경] 데미지 적용 로직
     public int applyDamage(int rawDmg) {
-        if (shieldActive || evasionActive) {
-            // 방패(전사) 또는 회피(엘프)로 무효화
-            shieldActive = false;
-            evasionActive = false;
-            return 0; // 무효화된 데미지
-        }
-        
-        int finalDmg = rawDmg;
-        
-        // 일반 방어: 방어력의 1.5배만큼 데미지 감소
+        int finalDef = def;
+
+        // 방어 태세일 경우 방어력을 일시적으로 2배 적용 (혹은 데미지 반감 등 룰 설정)
+        // 요청하신 "상대 공격 - 내 방어" 논리를 강화하기 위해 방어 태세 시 방어력 증가로 구현
         if (defending) {
-            finalDmg -= (int)(def * 1.5);
-            defending = false;
-        } else {
-            // 일반 피격: 방어력만큼 데미지 감소
-            finalDmg -= def;
+            finalDef = def * 2; 
+            defending = false; // 방어는 1회 피격 후 해제
         }
-        
-        finalDmg = Math.max(1, finalDmg); // 최소 1 데미지 보장
+
+        int finalDmg = rawDmg - finalDef;
+        if (finalDmg < 1) finalDmg = 1; // 최소 데미지 1 보장
 
         currentHp -= finalDmg;
         if (currentHp < 0) currentHp = 0;
         
-        return finalDmg; // 실제 입은 데미지
+        return finalDmg;
     }
 }
